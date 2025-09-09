@@ -1,13 +1,23 @@
-const User = require('../models/User');
+const jwt = require('jsonwebtoken');
 
-module.exports = async function(req, res, next) {
+// Logic xác thực token JWT
+module.exports = function(req, res, next) {
+    // Lấy token từ header
+    const token = req.header('x-auth-token');
+
+    // Kiểm tra nếu không có token
+    if (!token) {
+        return res.status(401).json({ msg: 'Không có token, truy cập bị từ chối' });
+    }
+
     try {
-        const user = await User.findById(req.user.id);
-        if (user.role !== 'admin') {
-            return res.status(403).json({ msg: 'Access denied. Admin resource.' });
-        }
+        // Xác thực token
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        
+        // Gán thông tin người dùng từ payload vào request
+        req.user = decoded.user;
         next();
     } catch (err) {
-        res.status(500).send('Server Error');
+        res.status(401).json({ msg: 'Token không hợp lệ' });
     }
 };
