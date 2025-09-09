@@ -17,45 +17,29 @@ router.post(
     async (req, res) => {
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
-            // Lấy lỗi đầu tiên để hiển thị
-            const firstError = errors.array().map(error => error.msg)[0];
-            return res.status(400).json({ msg: firstError });
+            return res.status(400).json({ msg: errors.array()[0].msg });
         }
 
         const { username, email, password } = req.body;
 
         try {
-            let userByEmail = await User.findOne({ email });
-            if (userByEmail) {
-                return res.status(400).json({ msg: 'Email này đã được sử dụng' });
+            let user = await User.findOne({ $or: [{ email }, { username }] });
+            if (user) {
+                return res.status(400).json({ msg: 'Email hoặc tên đăng nhập đã tồn tại' });
             }
 
-            let userByUsername = await User.findOne({ username });
-            if (userByUsername) {
-                return res.status(400).json({ msg: 'Tên đăng nhập này đã tồn tại' });
-            }
-
-            const user = new User({
-                username,
-                email,
-                password,
-            });
+            user = new User({ username, email, password });
 
             const salt = await bcrypt.genSalt(10);
             user.password = await bcrypt.hash(password, salt);
-
             await user.save();
 
-            const payload = { user: { id: user.id, username: user.username } };
-            jwt.sign(
-                payload,
-                process.env.JWT_SECRET,
-                { expiresIn: '5h' },
-                (err, token) => {
-                    if (err) throw err;
-                    res.json({ token });
-                }
-            );
+            // Thêm 'role' vào JWT payload
+            const payload = { user: { id: user.id, username: user.username, role: user.role } };
+            jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '5h' }, (err, token) => {
+                if (err) throw err;
+                res.json({ token });
+            });
         } catch (err) {
             console.error(err.message);
             res.status(500).send('Lỗi máy chủ');
@@ -68,39 +52,34 @@ router.post(
 router.post(
     '/login',
     [
-        check('email', 'Vui lòng nhập email').isEmail(),
+        check('email', 'Vui lòng nhập email hoặc tên đăng nhập').not().isEmpty(),
         check('password', 'Mật khẩu là bắt buộc').exists(),
     ],
     async (req, res) => {
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
-            const firstError = errors.array().map(error => error.msg)[0];
-            return res.status(400).json({ msg: firstError });
+            return res.status(400).json({ msg: errors.array()[0].msg });
         }
 
         const { email, password } = req.body;
 
         try {
-            let user = await User.findOne({ email });
+            let user = await User.findOne({ $or: [{ email: email }, { username: email }] });
             if (!user) {
-                return res.status(400).json({ msg: 'Email hoặc mật khẩu không chính xác' });
+                return res.status(400).json({ msg: 'Thông tin đăng nhập không hợp lệ' });
             }
 
             const isMatch = await bcrypt.compare(password, user.password);
             if (!isMatch) {
-                return res.status(400).json({ msg: 'Email hoặc mật khẩu không chính xác' });
+                return res.status(400).json({ msg: 'Thông tin đăng nhập không hợp lệ' });
             }
 
-            const payload = { user: { id: user.id, username: user.username } };
-            jwt.sign(
-                payload,
-                process.env.JWT_SECRET,
-                { expiresIn: '5h' },
-                (err, token) => {
-                    if (err) throw err;
-                    res.json({ token });
-                }
-            );
+            // Thêm 'role' vào JWT payload
+            const payload = { user: { id: user.id, username: user.username, role: user.role } };
+            jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '5h' }, (err, token) => {
+                if (err) throw err;
+                res.json({ token });
+            });
         } catch (err) {
             console.error(err.message);
             res.status(500).send('Lỗi máy chủ');
