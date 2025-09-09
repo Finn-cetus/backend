@@ -2,17 +2,18 @@ const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/authMiddleware');
 const Course = require('../models/Course');
+const User = require('../models/User'); // Import User model
 
 // @route   GET api/courses
 // @desc    Get all courses with pagination
 router.get('/', async (req, res) => {
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10; // Mặc định 10 khóa học/trang
+    const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
     try {
         const courses = await Course.find()
-            .sort({ createdAt: -1 }) // Mới nhất lên đầu
+            .sort({ createdAt: -1 })
             .skip(skip)
             .limit(limit);
         
@@ -48,6 +49,10 @@ router.post('/', auth, async (req, res) => {
         });
 
         const course = await newCourse.save();
+
+        // Cập nhật bộ đếm đóng góp của người dùng
+        await User.findByIdAndUpdate(req.user.id, { $inc: { contributionCount: 1 } });
+
         res.json(course);
     } catch (err) {
         console.error(err.message);
